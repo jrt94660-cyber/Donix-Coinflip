@@ -1,0 +1,23 @@
+# Donix-Coinflip configuration
+
+# Currency symbol shown in menus and messages.
+currency-symbol: "$"
+
+# Bet limits. Players must have enough money to cover the full bet.
+minimum-bet: 1000
+maximum-bet: 1000000000
+
+# Suggested amounts shown in the Java native create dialog.
+presets:
+  - 1000
+  - 1000000
+  - 1000000000
+
+# Java native dialog pagination.
+java-page-size: 12
+
+# Floodgate players use the chest GUI. Java players use native dialogs.
+bedrock-chest-menu: true
+
+messages:
+  prefix: "&8[&bCoinflip&8] &7"
