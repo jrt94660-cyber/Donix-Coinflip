@@ -1,9 +1,15 @@
 package com.donix.coinflip;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.Sound;
 import org.bukkit.entity.Player;
+
+import java.time.Duration;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -24,6 +30,11 @@ public final class CoinflipService {
     private final DonixCoinflipPlugin plugin;
     private final EconomyProvider economy;
     private final Map<UUID, Offer> offers = new LinkedHashMap<>();
+    private final Map<UUID, ActiveMatch> activeMatches = new LinkedHashMap<>();
+
+    private record ActiveMatch(Offer offer, UUID challengerId, String challengerName,
+                               UUID winnerId, String winnerName, String loserName) {
+    }
 
     public CoinflipService(DonixCoinflipPlugin plugin, EconomyProvider economy) {
         this.plugin = plugin;
@@ -128,48 +139,159 @@ public final class CoinflipService {
             return false;
         }
 
-        // Remove the listing before rolling so it cannot be joined twice.
+        // Remove the listing immediately so it cannot be accepted twice.
         offers.remove(offer.id());
 
         boolean creatorWins = ThreadLocalRandom.current().nextBoolean();
         UUID winnerId = creatorWins ? offer.ownerId() : challenger.getUniqueId();
-        UUID loserId = creatorWins ? challenger.getUniqueId() : offer.ownerId();
-        BigDecimal pot = offer.amount().multiply(BigDecimal.valueOf(2));
+        String winnerName = creatorWins ? offer.ownerName() : challenger.getName();
+        String loserName = creatorWins ? challenger.getName() : offer.ownerName();
+        ActiveMatch match = new ActiveMatch(offer, challenger.getUniqueId(), challenger.getName(),
+                winnerId, winnerName, loserName);
+        activeMatches.put(offer.id(), match);
 
-        OfflinePlayer winner = Bukkit.getOfflinePlayer(winnerId);
+        message(challenger, "&eCoinflip accepted! Watch the roll...");
+        Player creator = Bukkit.getPlayer(offer.ownerId());
+        if (creator != null) {
+            message(creator, "&e" + challenger.getName() + " &ejoined your coinflip! Watch the roll...");
+        }
+
+        startRoll(offer.id(), match);
+        return true;
+    }
+
+    /**
+     * Runs a private name-vs-name roulette on the two participants' screens only.
+     * The winner is selected once with a 50/50 boolean before the animation starts.
+     */
+    private void startRoll(UUID matchId, ActiveMatch match) {
+        int frames = Math.max(12, plugin.getConfig().getInt("roll.animation-frames", 24));
+        long interval = Math.max(1L, plugin.getConfig().getLong("roll.interval-ticks", 3L));
+        final int[] frame = {0};
+
+        plugin.getServer().getScheduler().runTaskTimer(plugin, task -> {
+            ActiveMatch active = activeMatches.get(matchId);
+            if (active == null) {
+                task.cancel();
+                return;
+            }
+
+            if (frame[0] >= frames) {
+                task.cancel();
+                finishMatch(matchId);
+                return;
+            }
+
+            boolean showCreator = frame[0] % 2 == 0;
+            String highlighted = showCreator ? match.offer().ownerName() : match.challengerName();
+            String other = showCreator ? match.challengerName() : match.offer().ownerName();
+            NamedTextColor highlightColor = showCreator ? NamedTextColor.GOLD : NamedTextColor.AQUA;
+
+            Component title = Component.text(highlighted, highlightColor);
+            Component subtitle = Component.text(other + "  vs  " + highlighted
+                    + "   •   " + format(match.offer().amount()), NamedTextColor.GRAY);
+
+            showPrivateTitle(match.offer().ownerId(), title, subtitle);
+            showPrivateTitle(match.challengerId(), title, subtitle);
+
+            if (frame[0] % 4 == 0) {
+                playPrivateSound(match.offer().ownerId(), Sound.UI_BUTTON_CLICK, 0.45f, 1.15f + (frame[0] * 0.015f));
+                playPrivateSound(match.challengerId(), Sound.UI_BUTTON_CLICK, 0.45f, 1.15f + (frame[0] * 0.015f));
+            }
+            frame[0]++;
+        }, 0L, interval);
+    }
+
+    private void finishMatch(UUID matchId) {
+        ActiveMatch match = activeMatches.get(matchId);
+        if (match == null) {
+            return;
+        }
+
+        BigDecimal pot = match.offer().amount().multiply(BigDecimal.valueOf(2));
+        OfflinePlayer winner = Bukkit.getOfflinePlayer(match.winnerId());
+
         if (!economy.deposit(winner, pot)) {
-            boolean creatorRefunded = economy.deposit(Bukkit.getOfflinePlayer(offer.ownerId()), offer.amount());
-            boolean challengerRefunded = economy.deposit(challenger, offer.amount());
+            boolean creatorRefunded = economy.deposit(
+                    Bukkit.getOfflinePlayer(match.offer().ownerId()), match.offer().amount());
+            boolean challengerRefunded = economy.deposit(
+                    Bukkit.getOfflinePlayer(match.challengerId()), match.offer().amount());
+
+            activeMatches.remove(matchId);
             if (!creatorRefunded || !challengerRefunded) {
-                plugin.getLogger().severe("Coinflip payout and refund failed for offer " + offer.id()
+                plugin.getLogger().severe("Coinflip payout and refund failed for match " + matchId
                         + ". Manual economy review may be required.");
             }
-            message(challenger, "&cThe payout failed. Both bets were refunded where possible.");
-            Player creator = Bukkit.getPlayer(offer.ownerId());
+
+            Component failureTitle = Component.text("PAYOUT FAILED", NamedTextColor.RED);
+            Component failureSubtitle = Component.text("Bets refunded where possible", NamedTextColor.GRAY);
+            showPrivateTitle(match.offer().ownerId(), failureTitle, failureSubtitle);
+            showPrivateTitle(match.challengerId(), failureTitle, failureSubtitle);
+            Player creator = Bukkit.getPlayer(match.offer().ownerId());
+            Player challenger = Bukkit.getPlayer(match.challengerId());
             if (creator != null) {
                 message(creator, "&cThe coinflip payout failed. Your bet was refunded where possible.");
             }
-            return false;
+            if (challenger != null) {
+                message(challenger, "&cThe coinflip payout failed. Your bet was refunded where possible.");
+            }
+            return;
         }
 
-        String winnerName = winnerId.equals(challenger.getUniqueId()) ? challenger.getName() : offer.ownerName();
-        String loserName = loserId.equals(challenger.getUniqueId()) ? challenger.getName() : offer.ownerName();
+        activeMatches.remove(matchId);
+        String result = match.winnerName() + " beat " + match.loserName();
+        Component winnerTitle = Component.text(match.winnerName(), NamedTextColor.GREEN);
+        Component winnerSubtitle = Component.text("WON THE COINFLIP  •  " + format(pot), NamedTextColor.YELLOW);
+        Component loserTitle = Component.text(match.winnerName(), NamedTextColor.RED);
+        Component loserSubtitle = Component.text("DEFEATED " + match.loserName()
+                + "  •  " + format(pot), NamedTextColor.GRAY);
 
-        message(challenger, winnerId.equals(challenger.getUniqueId())
-                ? "&aYou won the coinflip! You received &f" + format(pot) + "&a."
-                : "&cYou lost the coinflip. &f" + winnerName + " &cwon &f" + format(pot) + "&c.");
+        for (UUID participant : List.of(match.offer().ownerId(), match.challengerId())) {
+            boolean isWinner = participant.equals(match.winnerId());
+            showPrivateTitle(participant, isWinner ? winnerTitle : loserTitle,
+                    isWinner ? winnerSubtitle : loserSubtitle);
+            playPrivateSound(participant,
+                    isWinner ? Sound.UI_TOAST_CHALLENGE_COMPLETE : Sound.BLOCK_NOTE_BLOCK_BASS,
+                    0.8f, isWinner ? 1.0f : 0.75f);
+        }
 
-        Player creator = Bukkit.getPlayer(offer.ownerId());
+        Player creator = Bukkit.getPlayer(match.offer().ownerId());
+        Player challenger = Bukkit.getPlayer(match.challengerId());
+
         if (creator != null) {
-            message(creator, winnerId.equals(creator.getUniqueId())
+            message(creator, match.winnerId().equals(creator.getUniqueId())
                     ? "&aYou won the coinflip! You received &f" + format(pot) + "&a."
-                    : "&cYou lost the coinflip. &f" + winnerName + " &cwon &f" + format(pot) + "&c.");
+                    : "&cYou lost the coinflip. &f" + match.winnerName() + " &cwon &f" + format(pot) + "&c.");
+        }
+        if (challenger != null) {
+            message(challenger, match.winnerId().equals(challenger.getUniqueId())
+                    ? "&aYou won the coinflip! You received &f" + format(pot) + "&a."
+                    : "&cYou lost the coinflip. &f" + match.winnerName() + " &cwon &f" + format(pot) + "&c.");
         }
 
-        Bukkit.broadcast(LEGACY.deserialize(plugin.getConfig().getString("messages.prefix", "&8[&bCoinflip&8] &7")
-                + "&f" + winnerName + " &awon a coinflip against &f" + loserName
-                + " &afor &f" + format(pot) + "&a!"));
-        return true;
+        // No server-wide broadcast: only the two players in this match see the roll and result.
+        plugin.getLogger().fine("Private coinflip result: " + result + " for " + format(pot));
+    }
+
+    private void showPrivateTitle(UUID playerId, Component title, Component subtitle) {
+        Player player = Bukkit.getPlayer(playerId);
+        if (player == null || !player.isOnline()) {
+            return;
+        }
+
+        Title.Times times = Title.Times.times(
+                Duration.ofMillis(80),
+                Duration.ofMillis(650),
+                Duration.ofMillis(100)
+        );
+        player.showTitle(Title.title(title, subtitle, times));
+    }
+
+    private void playPrivateSound(UUID playerId, Sound sound, float volume, float pitch) {
+        Player player = Bukkit.getPlayer(playerId);
+        if (player != null && player.isOnline()) {
+            player.playSound(player.getLocation(), sound, volume, pitch);
+        }
     }
 
     public void refundOutstanding() {
@@ -188,6 +310,19 @@ public final class CoinflipService {
             }
         }
         offers.clear();
+
+        // A server shutdown during the animation must not leave either player's stake held.
+        List<ActiveMatch> matches = new ArrayList<>(activeMatches.values());
+        for (ActiveMatch match : matches) {
+            boolean creatorRefunded = economy.deposit(
+                    Bukkit.getOfflinePlayer(match.offer().ownerId()), match.offer().amount());
+            boolean challengerRefunded = economy.deposit(
+                    Bukkit.getOfflinePlayer(match.challengerId()), match.offer().amount());
+            if (!creatorRefunded || !challengerRefunded) {
+                plugin.getLogger().severe("Could not refund both players for active coinflip " + match.offer().id());
+            }
+        }
+        activeMatches.clear();
     }
 
     public String format(BigDecimal amount) {
