@@ -1,0 +1,17 @@
+name: Donix-Coinflip
+version: 1.0.0
+main: com.donix.coinflip.DonixCoinflipPlugin
+api-version: '1.21.7'
+authors: [jrt94660-cyber]
+description: Coinflip with native Java dialogs and a Bedrock chest GUI.
+softdepend: [Vault, floodgate, Geyser-Spigot]
+commands:
+  cf:
+    description: Open the coinflip menu or manage your active coinflip.
+    usage: /cf [create <amount>|cancel]
+    aliases: [coinflip]
+    permission: donixcoinflip.use
+permissions:
+  donixcoinflip.use:
+    description: Allows players to use coinflip.
+    default: true
