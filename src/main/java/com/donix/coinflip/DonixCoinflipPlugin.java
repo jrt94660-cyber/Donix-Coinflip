@@ -11,6 +11,14 @@ public final class DonixCoinflipPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        // Let optional economy plugins finish registering their Vault service first.
+        getServer().getScheduler().runTask(this, this::initialize);
+    }
+
+    private void initialize() {
+        if (!isEnabled()) {
+            return;
+        }
 
         if (Bukkit.getPluginManager().getPlugin("Vault") == null) {
             getLogger().severe("Vault was not found. Install Vault and an economy plugin with a Vault bridge.");
