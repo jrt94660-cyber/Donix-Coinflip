@@ -21,3 +21,7 @@ bedrock-chest-menu: true
 
 messages:
   prefix: "&8[&bCoinflip&8] &7"
+# Private roll animation shown only to the two players in a match.
+roll:
+  animation-frames: 24
+  interval-ticks: 3
