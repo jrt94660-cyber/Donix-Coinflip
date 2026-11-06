@@ -52,56 +52,62 @@ public final class CoinflipMenus implements Listener {
 
     private void openJavaList(Player player, int requestedPage) {
         List<CoinflipService.Offer> offers = service.getOffers();
-        int pageSize = Math.max(1, plugin.getConfig().getInt("java-page-size", 12));
+
+        // Eight listings fit into four paired rows, leaving the final row for Refresh and Create.
+        int configuredPageSize = plugin.getConfig().getInt("java-page-size", 8);
+        int pageSize = Math.min(8, Math.max(1, configuredPageSize));
         int pages = Math.max(1, (int) Math.ceil(offers.size() / (double) pageSize));
         int page = Math.max(0, Math.min(requestedPage, pages - 1));
-        int start = page * pageSize;
-        int end = Math.min(offers.size(), start + pageSize);
+        int startIndex = page * pageSize;
+        int endIndex = Math.min(offers.size(), startIndex + pageSize);
 
         StringBuilder body = new StringBuilder();
-        body.append("Open coinflips").append("\n");
-        body.append("Choose a player below to match their bet. The winner receives both bets.").append("\n\n");
-
+        body.append("Choose an open coinflip to match the player's bet.").append("\n\n");
         if (offers.isEmpty()) {
-            body.append("There are currently no open coinflips.").append("\n");
+            body.append("There are currently no open coinflips.");
         } else {
-            for (int index = start; index < end; index++) {
-                CoinflipService.Offer offer = offers.get(index);
-                body.append(offer.ownerName())
-                        .append("  •  ")
-                        .append(service.format(offer.amount()))
-                        .append(offer.ownerId().equals(player.getUniqueId()) ? "  (Your bet)" : "")
-                        .append("\n");
+            body.append("Open bets: ").append(offers.size());
+            if (pages > 1) {
+                body.append("    •    Page ").append(page + 1).append(" / ").append(pages);
             }
         }
-        body.append("\nPage ").append(page + 1).append(" / ").append(pages);
 
         List<ActionButton> actions = new ArrayList<>();
-        for (int index = start; index < end; index++) {
+
+        // Listings are authored in pairs, so the dialog displays two compact buttons per row.
+        for (int index = startIndex; index < endIndex; index++) {
             CoinflipService.Offer offer = offers.get(index);
             if (offer.ownerId().equals(player.getUniqueId())) {
-                actions.add(button("Cancel your " + service.format(offer.amount()) + " bet",
+                actions.add(button("Cancel • " + service.format(offer.amount()),
                         "Refund your open coinflip bet",
-                        KEY_PREFIX + "list/cancel/" + offer.id()));
+                        KEY_PREFIX + "list/cancel/" + offer.id(), 158));
             } else {
-                actions.add(button("Join " + offer.ownerName() + "  •  " + service.format(offer.amount()),
-                        "Match this bet for a chance to win " + service.format(offer.amount().multiply(BigDecimal.valueOf(2))),
-                        KEY_PREFIX + "list/join/" + offer.id()));
+                actions.add(button(offer.ownerName() + " • " + service.format(offer.amount()),
+                        "Join this coinflip. Potential pot: "
+                                + service.format(offer.amount().multiply(BigDecimal.valueOf(2))),
+                        KEY_PREFIX + "list/join/" + offer.id(), 158));
             }
         }
 
-        actions.add(button("Create coinflip", "Choose an amount to put up", KEY_PREFIX + "list/create"));
-        actions.add(button("Refresh list", "Reload the current open coinflips", KEY_PREFIX + "list/refresh/" + page));
+        // Keep page controls above the footer, with Refresh and Create always in the bottom row.
         if (page > 0) {
-            actions.add(button("Previous page", "View the previous page", KEY_PREFIX + "list/page/" + (page - 1)));
+            actions.add(button("Previous", "View the previous page",
+                    KEY_PREFIX + "list/page/" + (page - 1), 158));
         }
         if (page + 1 < pages) {
-            actions.add(button("Next page", "View the next page", KEY_PREFIX + "list/page/" + (page + 1)));
+            actions.add(button("Next", "View the next page",
+                    KEY_PREFIX + "list/page/" + (page + 1), 158));
         }
 
+        actions.add(button("Refresh", "Reload the current coinflip list",
+                KEY_PREFIX + "list/refresh/" + page, 158));
+        actions.add(button("Create", "Create a new coinflip",
+                KEY_PREFIX + "list/create", 158));
+
         Dialog dialog = Dialog.create(builder -> builder.empty()
-                .base(DialogBase.builder(Component.text("Donix Coinflip", NamedTextColor.AQUA))
-                        .body(List.of(DialogBody.plainMessage(Component.text(body.toString(), NamedTextColor.GRAY))))
+                .base(DialogBase.builder(Component.text("CoinFlip", NamedTextColor.AQUA))
+                        .body(List.of(DialogBody.plainMessage(
+                                Component.text(body.toString(), NamedTextColor.GRAY))))
                         .canCloseWithEscape(true)
                         .build())
                 .type(DialogType.multiAction(actions, null, 2)));
@@ -109,37 +115,41 @@ public final class CoinflipMenus implements Listener {
     }
 
     private void openJavaCreate(Player player) {
-        List<ActionButton> actions = new ArrayList<>();
+        openJavaCreate(player, "1000");
+    }
+
+    private void openJavaCreate(Player player, String initialAmount) {
         List<Long> presets = plugin.getConfig().getLongList("presets");
-        if (presets.isEmpty()) {
+        if (presets.size() < 3) {
             presets = List.of(1_000L, 1_000_000L, 1_000_000_000L);
         }
 
-        for (long preset : presets) {
+        List<ActionButton> actions = new ArrayList<>();
+        for (long preset : presets.stream().limit(3).toList()) {
             if (preset <= 0) {
                 continue;
             }
             BigDecimal amount = BigDecimal.valueOf(preset);
             String amountText = amount.stripTrailingZeros().toPlainString();
-            actions.add(button("Use " + service.format(amount), "Select this suggested amount",
-                    KEY_PREFIX + "create/preset/" + amountText));
+            actions.add(button(service.format(amount),
+                    "Fill the amount field with this suggested bet",
+                    KEY_PREFIX + "create/preset/" + amountText, 112));
         }
 
-        actions.add(button("Confirm typed amount", "Continue using the amount entered above",
-                KEY_PREFIX + "create/confirm-input"));
-        actions.add(button("Cancel", "Return to the coinflip list", KEY_PREFIX + "create/cancel"));
+        actions.add(button("Confirm", "Create your coinflip using the amount above",
+                KEY_PREFIX + "create/confirm-input", 112));
+        actions.add(button("Cancel", "Return to the coinflip list without creating a bet",
+                KEY_PREFIX + "create/cancel", 112));
 
         Dialog dialog = Dialog.create(builder -> builder.empty()
-                .base(DialogBase.builder(Component.text("Create a Coinflip", NamedTextColor.AQUA))
-                        .body(List.of(
-                                DialogBody.plainMessage(Component.text(
-                                        "Enter your bet amount or choose one of the suggested amounts below.\n"
-                                                + "Your money is held until the coinflip is joined or cancelled.",
-                                        NamedTextColor.GRAY))
-                        ))
+                .base(DialogBase.builder(Component.text("Create CoinFlip", NamedTextColor.AQUA))
+                        .body(List.of(DialogBody.plainMessage(Component.text(
+                                "Type your bet amount, or choose one of the three suggestions.\n"
+                                        + "A suggestion fills the field; press Confirm when ready.",
+                                NamedTextColor.GRAY))))
                         .inputs(List.of(
-                                DialogInput.text("amount", Component.text("Bet amount"))
-                                        .initial("1000")
+                                DialogInput.text("amount", Component.text("Amount"))
+                                        .initial(initialAmount)
                                         .maxLength(24)
                                         .width(300)
                                         .labelVisible(true)
@@ -147,37 +157,19 @@ public final class CoinflipMenus implements Listener {
                         ))
                         .canCloseWithEscape(true)
                         .build())
-                .type(DialogType.multiAction(actions, null, 2)));
-        player.showDialog(dialog);
-    }
-
-    private void openJavaConfirm(Player player, BigDecimal amount) {
-        String amountText = amount.stripTrailingZeros().toPlainString();
-        BigDecimal pot = amount.multiply(BigDecimal.valueOf(2));
-        ActionButton confirm = button("Confirm " + service.format(amount),
-                "Hold this amount and publish your coinflip",
-                KEY_PREFIX + "confirm/yes/" + amountText);
-        ActionButton cancel = button("Cancel",
-                "Return to the coinflip list without spending money",
-                KEY_PREFIX + "confirm/no");
-
-        Dialog dialog = Dialog.create(builder -> builder.empty()
-                .base(DialogBase.builder(Component.text("Confirm Coinflip", NamedTextColor.AQUA))
-                        .body(List.of(DialogBody.plainMessage(Component.text(
-                                "Your bet: " + service.format(amount) + "\n"
-                                        + "Potential pot: " + service.format(pot) + "\n\n"
-                                        + "Your bet will be withdrawn when you confirm.",
-                                NamedTextColor.GRAY))))
-                        .canCloseWithEscape(true)
-                        .build())
-                .type(DialogType.confirmation(confirm, cancel)));
+                // Three compact preset buttons share the first row; Confirm and Cancel are below.
+                .type(DialogType.multiAction(actions, null, 3)));
         player.showDialog(dialog);
     }
 
     private ActionButton button(String label, String tooltip, String actionKey) {
+        return button(label, tooltip, actionKey, 158);
+    }
+
+    private ActionButton button(String label, String tooltip, String actionKey, int width) {
         return ActionButton.builder(Component.text(label))
                 .tooltip(Component.text(tooltip))
-                .width(220)
+                .width(width)
                 .action(DialogAction.customClick(Key.key(actionKey), null))
                 .build();
     }
@@ -228,38 +220,22 @@ public final class CoinflipMenus implements Listener {
             return;
         }
         if (key.equals(KEY_PREFIX + "create/confirm-input")) {
-            if (event.getDialogResponseView() == null) {
-                openJavaCreate(player);
-                return;
-            }
-            BigDecimal amount = CoinflipService.parseAmount(event.getDialogResponseView().getText("amount"));
+            String input = event.getDialogResponseView() == null
+                    ? null : event.getDialogResponseView().getText("amount");
+            BigDecimal amount = CoinflipService.parseAmount(input);
             if (amount == null) {
                 service.message(player, "&cEnter a valid amount, such as &f1k, 1m, or 1b&c.");
-                openJavaCreate(player);
+                openJavaCreate(player, input == null ? "" : input);
             } else {
-                openJavaConfirm(player, amount);
+                service.create(player, amount);
+                openJavaList(player, 0);
             }
             return;
         }
         if (key.startsWith(KEY_PREFIX + "create/preset/")) {
-            BigDecimal amount = CoinflipService.parseAmount(
-                    key.substring((KEY_PREFIX + "create/preset/").length()));
-            if (amount == null) {
-                openJavaCreate(player);
-            } else {
-                openJavaConfirm(player, amount);
-            }
-            return;
-        }
-        if (key.startsWith(KEY_PREFIX + "confirm/yes/")) {
-            BigDecimal amount = CoinflipService.parseAmount(
-                    key.substring((KEY_PREFIX + "confirm/yes/").length()));
-            service.create(player, amount);
-            openJavaList(player, 0);
-            return;
-        }
-        if (key.equals(KEY_PREFIX + "confirm/no")) {
-            openJavaList(player, 0);
+            String preset = key.substring((KEY_PREFIX + "create/preset/").length());
+            // Reopen the same form with the selected preset filled into the text input.
+            openJavaCreate(player, preset);
         }
     }
 
