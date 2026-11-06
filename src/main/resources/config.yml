@@ -14,7 +14,7 @@ presets:
   - 1000000000
 
 # Java native dialog pagination.
-java-page-size: 12
+java-page-size: 8
 
 # Floodgate players use the chest GUI. Java players use native dialogs.
 bedrock-chest-menu: true
