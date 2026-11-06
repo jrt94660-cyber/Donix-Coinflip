@@ -6,8 +6,9 @@ A Paper coinflip plugin with **native Minecraft dialogs for Java players** and a
 
 - `/cf` opens the live coinflip list.
 - Java players get a Paper native dialog with join buttons, Create, and Refresh.
-- The Java create dialog includes an amount text field and configurable quick amounts (default: 1k, 1m, 1b).
-- Java amount selection opens a separate Confirm / Cancel dialog. Either choice returns to the coinflip list.
+- The Java coinflip list uses compact two-column buttons, with Refresh and Create at the bottom.
+- The Java create dialog shows an amount field, three preset buttons, then Confirm and Cancel in one dialog. Preset buttons fill the amount field.
+- Confirm creates the coinflip directly; Cancel returns to the list.
 - Floodgate players get a 54-slot chest menu with open bets, pagination, and Refresh.
 - Bedrock players create bets with `/cf create <amount>`, for example `/cf create 1m`.
 - `/cf cancel` cancels the player's own open bet and refunds it.
@@ -37,7 +38,7 @@ Examples: `/cf create 1k`, `/cf create 1m`, `/cf create 1b`.
 
 1. Install Vault and a Vault-compatible economy provider.
 2. Install Floodgate if Bedrock players connect through Geyser.
-3. Put `Donix-Coinflip-1.0.2.jar` in the server's `plugins` folder.
+3. Put `Donix-Coinflip-1.0.3.jar` in the server's `plugins` folder.
 4. Restart the server.
 5. Edit `plugins/Donix-Coinflip/config.yml` to adjust bet limits, quick amounts, and the currency symbol.
 
@@ -55,4 +56,4 @@ Run:
 mvn clean package
 ```
 
-The JAR is written to `target/Donix-Coinflip-1.0.2.jar`. GitHub Actions also builds the plugin on pushes to `main` and uploads the JAR as a workflow artifact.
+The JAR is written to `target/Donix-Coinflip-1.0.3.jar`. GitHub Actions also builds the plugin on pushes to `main` and uploads the JAR as a workflow artifact.
