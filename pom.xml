@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.donix</groupId>
     <artifactId>Donix-Coinflip</artifactId>
-    <version>1.0.3</version>
+    <version>1.0.4</version>
     <packaging>jar</packaging>
     <name>Donix-Coinflip</name>
     <description>Native Java dialogs and Bedrock chest GUI coinflip plugin.</description>
