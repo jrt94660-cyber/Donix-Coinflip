@@ -38,7 +38,7 @@ Examples: `/cf create 1k`, `/cf create 1m`, `/cf create 1b`.
 
 1. Install Vault and a Vault-compatible economy provider.
 2. Install Floodgate if Bedrock players connect through Geyser.
-3. Put `Donix-Coinflip-1.0.3.jar` in the server's `plugins` folder.
+3. Put `Donix-Coinflip-1.0.4.jar` in the server's `plugins` folder.
 4. Restart the server.
 5. Edit `plugins/Donix-Coinflip/config.yml` to adjust bet limits, quick amounts, and the currency symbol.
 
@@ -56,4 +56,6 @@ Run:
 mvn clean package
 ```
 
-The JAR is written to `target/Donix-Coinflip-1.0.3.jar`. GitHub Actions also builds the plugin on pushes to `main` and uploads the JAR as a workflow artifact.
+The JAR is written to `target/Donix-Coinflip-1.0.4.jar`. GitHub Actions also builds the plugin on pushes to `main` and uploads the JAR as a workflow artifact.
+
+- The Create button is hidden for a player while they have an open coinflip. It becomes available again after their offer is cancelled or matched. This applies to the Java native dialog and Bedrock chest GUI.
