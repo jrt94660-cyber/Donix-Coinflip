@@ -101,8 +101,12 @@ public final class CoinflipMenus implements Listener {
 
         actions.add(button("Refresh", "Reload the current coinflip list",
                 KEY_PREFIX + "list/refresh/" + page, 158));
-        actions.add(button("Create", "Create a new coinflip",
-                KEY_PREFIX + "list/create", 158));
+
+        // A player may have only one open wager. Hide Create until their own offer is cancelled or matched.
+        if (service.getOfferOwnedBy(player.getUniqueId()) == null) {
+            actions.add(button("Create", "Create a new coinflip",
+                    KEY_PREFIX + "list/create", 158));
+        }
 
         Dialog dialog = Dialog.create(builder -> builder.empty()
                 .base(DialogBase.builder(Component.text("CoinFlip", NamedTextColor.AQUA))
@@ -292,12 +296,16 @@ public final class CoinflipMenus implements Listener {
 
         inventory.setItem(45, item(Material.ARROW, Component.text("Previous page", NamedTextColor.WHITE),
                 List.of(Component.text("Page " + Math.max(1, page), NamedTextColor.GRAY))));
-        inventory.setItem(49, item(Material.WRITABLE_BOOK, Component.text("Create coinflip", NamedTextColor.GREEN),
-                List.of(
-                        Component.text("Create a new wager using a command.", NamedTextColor.GRAY),
-                        Component.text("/cf create <amount>", NamedTextColor.YELLOW),
-                        Component.text("Example: /cf create 1m", NamedTextColor.DARK_GRAY)
-                )));
+        if (service.getOfferOwnedBy(player.getUniqueId()) == null) {
+            inventory.setItem(49, item(Material.WRITABLE_BOOK, Component.text("Create coinflip", NamedTextColor.GREEN),
+                    List.of(
+                            Component.text("Create a new wager using a command.", NamedTextColor.GRAY),
+                            Component.text("/cf create <amount>", NamedTextColor.YELLOW),
+                            Component.text("Example: /cf create 1m", NamedTextColor.DARK_GRAY)
+                    )));
+        } else {
+            inventory.setItem(49, filler);
+        }
         inventory.setItem(50, item(Material.CLOCK, Component.text("Refresh list", NamedTextColor.AQUA),
                 List.of(Component.text("Reload open coinflips", NamedTextColor.GRAY))));
         inventory.setItem(53, item(Material.ARROW, Component.text("Next page", NamedTextColor.WHITE),
