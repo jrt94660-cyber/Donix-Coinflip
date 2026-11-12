@@ -77,14 +77,9 @@ public final class CoinflipMenus implements Listener {
         // Listings are authored in pairs, so the dialog displays two compact buttons per row.
         for (int index = startIndex; index < endIndex; index++) {
             CoinflipService.Offer offer = offers.get(index);
-            if (offer.ownerId().equals(player.getUniqueId())) {
-                actions.add(button("Cancel • " + service.format(offer.amount()),
-                        "Refund your open coinflip bet",
-                        KEY_PREFIX + "list/cancel/" + offer.id(), 158));
-            } else {
+            if (!offer.ownerId().equals(player.getUniqueId())) {
                 actions.add(button(offer.ownerName() + " • " + service.format(offer.amount()),
-                        "Join this coinflip. Potential pot: "
-                                + service.format(offer.amount().multiply(BigDecimal.valueOf(2))),
+                        "View bet details and confirm before joining",
                         KEY_PREFIX + "list/join/" + offer.id(), 158));
             }
         }
@@ -166,6 +161,44 @@ public final class CoinflipMenus implements Listener {
         player.showDialog(dialog);
     }
 
+    private void openJavaJoinConfirm(Player player, UUID offerId) {
+        CoinflipService.Offer offer = service.getOffer(offerId);
+        if (offer == null) {
+            service.message(player, "&cThat coinflip is no longer available. Refresh the list.");
+            openJavaList(player, 0);
+            return;
+        }
+        if (offer.ownerId().equals(player.getUniqueId())) {
+            openJavaList(player, 0);
+            return;
+        }
+
+        BigDecimal total = offer.amount().multiply(BigDecimal.valueOf(2));
+        List<ActionButton> actions = List.of(
+                button("Confirm", "Join this coinflip. Your bet will be taken immediately.",
+                        KEY_PREFIX + "join/confirm/" + offerId, 112),
+                button("Back", "Return to the coinflip listing",
+                        KEY_PREFIX + "join/back", 112)
+        );
+        Dialog dialog = Dialog.create(builder -> builder.empty()
+                .base(DialogBase.builder(Component.text("Confirm CoinFlip", NamedTextColor.AQUA))
+                        .body(List.of(
+                                DialogBody.plainMessage(Component.text(
+                                        "You are matching " + offer.ownerName() + "'s bet of " + service.format(offer.amount()) + ".",
+                                        NamedTextColor.GRAY)),
+                                DialogBody.plainMessage(Component.text(
+                                        "WARNING: NO REFUNDS. Once confirmed, your bet cannot be refunded if you lose or change your mind.",
+                                        NamedTextColor.RED)),
+                                DialogBody.plainMessage(Component.text(
+                                        "Total pot: " + service.format(total),
+                                        NamedTextColor.GREEN))
+                        ))
+                        .canCloseWithEscape(true)
+                        .build())
+                .type(DialogType.confirmation(actions.get(0), actions.get(1))));
+        player.showDialog(dialog);
+    }
+
     private ActionButton button(String label, String tooltip, String actionKey) {
         return button(label, tooltip, actionKey, 158);
     }
@@ -205,17 +238,21 @@ public final class CoinflipMenus implements Listener {
         if (key.startsWith(KEY_PREFIX + "list/join/")) {
             UUID offerId = parseUuid(key.substring((KEY_PREFIX + "list/join/").length()));
             if (offerId != null) {
+                openJavaJoinConfirm(player, offerId);
+            } else {
+                openJavaList(player, 0);
+            }
+            return;
+        }
+        if (key.startsWith(KEY_PREFIX + "join/confirm/")) {
+            UUID offerId = parseUuid(key.substring((KEY_PREFIX + "join/confirm/").length()));
+            if (offerId != null) {
                 service.accept(player, offerId);
             }
             openJavaList(player, 0);
             return;
         }
-        if (key.startsWith(KEY_PREFIX + "list/cancel/")) {
-            UUID offerId = parseUuid(key.substring((KEY_PREFIX + "list/cancel/").length()));
-            CoinflipService.Offer offer = offerId == null ? null : service.getOffer(offerId);
-            if (offer != null && offer.ownerId().equals(player.getUniqueId())) {
-                service.cancel(player);
-            }
+        if (key.equals(KEY_PREFIX + "join/back")) {
             openJavaList(player, 0);
             return;
         }
@@ -287,11 +324,13 @@ public final class CoinflipMenus implements Listener {
             lore.add(Component.text("Bet: " + service.format(offer.amount()), NamedTextColor.YELLOW));
             lore.add(Component.text("Potential pot: "
                     + service.format(offer.amount().multiply(BigDecimal.valueOf(2))), NamedTextColor.GREEN));
-            lore.add(Component.text(own ? "Click to cancel and refund" : "Click to match this bet",
-                    own ? NamedTextColor.RED : NamedTextColor.AQUA));
+            lore.add(Component.text(own ? "Your active coinflip" : "Click to review and join",
+                    own ? NamedTextColor.GRAY : NamedTextColor.AQUA));
             Material icon = own ? Material.GOLD_BLOCK : Material.GOLD_INGOT;
             inventory.setItem(slot, item(icon, Component.text(title, own ? NamedTextColor.GOLD : NamedTextColor.YELLOW), lore));
-            holder.offerSlots.put(slot, offer.id());
+            if (!own) {
+                holder.offerSlots.put(slot, offer.id());
+            }
         }
 
         inventory.setItem(45, item(Material.ARROW, Component.text("Previous page", NamedTextColor.WHITE),
@@ -314,6 +353,33 @@ public final class CoinflipMenus implements Listener {
         player.openInventory(inventory);
     }
 
+    private void openBedrockJoinConfirm(Player player, UUID offerId, int returnPage) {
+        CoinflipService.Offer offer = service.getOffer(offerId);
+        if (offer == null || offer.ownerId().equals(player.getUniqueId())) {
+            openBedrock(player, returnPage);
+            return;
+        }
+        BedrockConfirmHolder holder = new BedrockConfirmHolder(offerId, returnPage);
+        Inventory inventory = Bukkit.createInventory(holder, 27,
+                Component.text("Confirm Coinflip", NamedTextColor.DARK_GRAY));
+        holder.inventory = inventory;
+        ItemStack filler = item(Material.GRAY_STAINED_GLASS_PANE, Component.text(" ", NamedTextColor.GRAY), List.of());
+        for (int slot = 0; slot < 27; slot++) inventory.setItem(slot, filler);
+        inventory.setItem(13, item(Material.GOLD_INGOT,
+                Component.text("Match " + service.format(offer.amount()), NamedTextColor.GOLD),
+                List.of(
+                        Component.text("Player: " + offer.ownerName(), NamedTextColor.GRAY),
+                        Component.text("Your bet: " + service.format(offer.amount()), NamedTextColor.YELLOW),
+                        Component.text("Total pot: " + service.format(offer.amount().multiply(BigDecimal.valueOf(2))), NamedTextColor.GREEN),
+                        Component.text("WARNING: NO REFUNDS after confirming.", NamedTextColor.RED)
+                )));
+        inventory.setItem(11, item(Material.LIME_CONCRETE, Component.text("CONFIRM", NamedTextColor.GREEN),
+                List.of(Component.text("Your bet will be taken immediately.", NamedTextColor.GRAY))));
+        inventory.setItem(15, item(Material.RED_CONCRETE, Component.text("BACK", NamedTextColor.RED),
+                List.of(Component.text("Return to coinflip listing.", NamedTextColor.GRAY))));
+        player.openInventory(inventory);
+    }
+
     private ItemStack item(Material material, Component name, List<Component> lore) {
         ItemStack stack = new ItemStack(material);
         ItemMeta meta = stack.getItemMeta();
@@ -327,7 +393,8 @@ public final class CoinflipMenus implements Listener {
 
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
-        if (!(event.getView().getTopInventory().getHolder(false) instanceof BedrockMenuHolder holder)) {
+        InventoryHolder topHolder = event.getView().getTopInventory().getHolder(false);
+        if (!(topHolder instanceof BedrockMenuHolder) && !(topHolder instanceof BedrockConfirmHolder)) {
             return;
         }
 
@@ -338,15 +405,24 @@ public final class CoinflipMenus implements Listener {
         }
 
         int slot = event.getSlot();
+        if (topHolder instanceof BedrockConfirmHolder confirm) {
+            if (slot == 11) {
+                service.accept(player, confirm.offerId);
+                openBedrock(player, 0);
+            } else if (slot == 15) {
+                openBedrock(player, confirm.returnPage);
+            }
+            return;
+        }
+        BedrockMenuHolder holder = (BedrockMenuHolder) topHolder;
         UUID offerId = holder.offerSlots.get(slot);
         if (offerId != null) {
             CoinflipService.Offer offer = service.getOffer(offerId);
-            if (offer != null && offer.ownerId().equals(player.getUniqueId())) {
-                service.cancel(player);
+            if (offer != null && !offer.ownerId().equals(player.getUniqueId())) {
+                openBedrockJoinConfirm(player, offerId, holder.page);
             } else {
-                service.accept(player, offerId);
+                openBedrock(player, holder.page);
             }
-            openBedrock(player, holder.page);
             return;
         }
 
@@ -358,6 +434,22 @@ public final class CoinflipMenus implements Listener {
             openBedrock(player, holder.page);
         } else if (slot == 53) {
             openBedrock(player, holder.page + 1);
+        }
+    }
+
+    private static final class BedrockConfirmHolder implements InventoryHolder {
+        private final UUID offerId;
+        private final int returnPage;
+        private Inventory inventory;
+
+        private BedrockConfirmHolder(UUID offerId, int returnPage) {
+            this.offerId = offerId;
+            this.returnPage = returnPage;
+        }
+
+        @Override
+        public Inventory getInventory() {
+            return inventory;
         }
     }
 
