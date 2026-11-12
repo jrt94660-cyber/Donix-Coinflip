@@ -1,5 +1,5 @@
 name: Donix-Coinflip
-version: 1.0.4
+version: 1.0.5
 main: com.donix.coinflip.DonixCoinflipPlugin
 api-version: '1.21.7'
 authors: [jrt94660-cyber]
